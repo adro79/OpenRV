@@ -8,7 +8,8 @@
 #include <iostream>
 #include <string>
 #include <stl_ext/string_algo.h>
-#include <tiffiop.h>
+#include <tiff.h>
+#include <tiffio.h>
 #include <tiffvers.h>
 #include <TwkFB/Exception.h>
 #include <TwkMath/Mat44.h>
@@ -345,22 +346,24 @@ readAllTags(TIFF* tif, FrameBuffer& img)
     //  Now the rest of the tags
     //
    
-    for (int fi = 0, nfi = tif->tif_nfields; fi < nfi; fi++)
+    int nfi = TIFFGetTagListCount(tif);
+    for (int fi = 0; fi < nfi; fi++)
     {
-        const TIFFField* const fip =  tif->tif_fields[fi];
+        const ttag_t tag = TIFFGetTagListEntry(tif, fi);
+        const TIFFField* const fip =  TIFFFindField(tif, fi, TIFF_ANY);
 
-        if (fip->field_tag != TIFFTAG_ICCPROFILE && // exclude tags we handle seperately
-            fip->field_tag != EXIFTAG_COLORSPACE &&
+        if (TIFFFieldTag(fip) != TIFFTAG_ICCPROFILE && // exclude tags we handle seperately
+            TIFFFieldTag(fip) != EXIFTAG_COLORSPACE &&
 
-            fip->field_tag != TIFFTAG_XRESOLUTION &&
-            fip->field_tag != TIFFTAG_YRESOLUTION &&
-            fip->field_tag != TIFFTAG_SOFTWARE &&
-            fip->field_tag != EXIFTAG_PIXELXDIMENSION &&
-            fip->field_tag != EXIFTAG_PIXELYDIMENSION &&
-            fip->field_tag != TIFFTAG_RESOLUTIONUNIT &&
-            fip->field_tag != TIFFTAG_PLANARCONFIG &&
+            TIFFFieldTag(fip) != TIFFTAG_XRESOLUTION &&
+            TIFFFieldTag(fip) != TIFFTAG_YRESOLUTION &&
+            TIFFFieldTag(fip) != TIFFTAG_SOFTWARE &&
+            TIFFFieldTag(fip) != EXIFTAG_PIXELXDIMENSION &&
+            TIFFFieldTag(fip) != EXIFTAG_PIXELYDIMENSION &&
+            TIFFFieldTag(fip) != TIFFTAG_RESOLUTIONUNIT &&
+            TIFFFieldTag(fip) != TIFFTAG_PLANARCONFIG &&
 
-            fip->field_tag != TIFFTAG_SUBIFD &&
+            TIFFFieldTag(fip) != TIFFTAG_SUBIFD &&
 
             // There are some variable length tags that require more than
             // one argument. This is an attempt to filter those out. However,
@@ -370,21 +373,21 @@ readAllTags(TIFF* tif, FrameBuffer& img)
             // see tif_dir.c _TIFFVGetField for multiple uses of va_arg()
             // by a tag type.
 
-            (fip->field_readcount != TIFF_VARIABLE ||
-             fip->field_type == TIFF_ASCII) &&
+            (TIFFFieldReadCount(fip) != TIFF_VARIABLE ||
+             TIFFFieldDataType(fip) == TIFF_ASCII) &&
 
-            //fip->field_tag != TIFFTAG_COLORMAP &&
-            //fip->field_tag != TIFFTAG_HALFTONEHINTS &&
-            fip->field_tag != TIFFTAG_PAGENUMBER &&
-            //fip->field_tag != TIFFTAG_SUBIFD &&
-            fip->field_tag != TIFFTAG_YCBCRSUBSAMPLING &&
-            //fip->field_tag != TIFFTAG_TRANSFERFUNCTION &&
+            //TIFFFieldTag(fip) != TIFFTAG_COLORMAP &&
+            //TIFFFieldTag(fip) != TIFFTAG_HALFTONEHINTS &&
+            TIFFFieldTag(fip) != TIFFTAG_PAGENUMBER &&
+            //TIFFFieldTag(fip) != TIFFTAG_SUBIFD &&
+            TIFFFieldTag(fip) != TIFFTAG_YCBCRSUBSAMPLING &&
+            //TIFFFieldTag(fip) != TIFFTAG_TRANSFERFUNCTION &&
 
-            fip->field_tag != TIFFTAG_PHOTOMETRIC &&
-            fip->field_tag != TIFFTAG_IMAGEWIDTH &&
-            fip->field_tag != TIFFTAG_IMAGELENGTH &&
-            fip->field_tag != TIFFTAG_BITSPERSAMPLE &&
-            fip->field_tag != TIFFTAG_SAMPLESPERPIXEL)
+            TIFFFieldTag(fip) != TIFFTAG_PHOTOMETRIC &&
+            TIFFFieldTag(fip) != TIFFTAG_IMAGEWIDTH &&
+            TIFFFieldTag(fip) != TIFFTAG_IMAGELENGTH &&
+            TIFFFieldTag(fip) != TIFFTAG_BITSPERSAMPLE &&
+            TIFFFieldTag(fip) != TIFFTAG_SAMPLESPERPIXEL)
         {
             unsigned char ch;
             char* text;
@@ -405,30 +408,30 @@ readAllTags(TIFF* tif, FrameBuffer& img)
                      (tag = exifTags[i].tag) && !exif_tag;
                      i++)
                 {
-                    exif_tag = (tag == fip->field_tag);
+                    exif_tag = (tag == TIFFFieldTag(fip));
                 }
             }
             
-            string aname = (exif_tag ? string("EXIF/") : string("TIFF/")) + fip->field_name;
+            string aname = (exif_tag ? string("EXIF/") : string("TIFF/")) + TIFFFieldName(fip);
             
-            switch (fip->field_type)
+            switch (TIFFFieldDataType(fip))
             {
               case TIFF_ASCII:
-                  if (fip->field_passcount)
+                  if (TIFFFieldPassCount(fip))
                   {
-                      if (TIFFGetField(tif, fip->field_tag, &Len, &text))
+                      if (TIFFGetField(tif, TIFFFieldTag(fip), &Len, &text))
                       {
                           img.attribute<string>(aname) = text;
                       }
                   }
-                  else if (TIFFGetField(tif, fip->field_tag, &text))
+                  else if (TIFFGetField(tif, TIFFFieldTag(fip), &text))
                   {
                       img.attribute<string>(aname) = text;
                   }
                   break;
                 
               case TIFF_SHORT:
-                  if (TIFFGetField(tif, fip->field_tag, &us))
+                  if (TIFFGetField(tif, TIFFFieldTag(fip), &us))
                   {
                       img.attribute<int>(aname) = us;
                   }
@@ -440,12 +443,12 @@ readAllTags(TIFF* tif, FrameBuffer& img)
                   {
                       void* array = 0;
 
-                      if (TIFFGetField(tif, fip->field_tag, &ui, &array))
+                      if (TIFFGetField(tif, TIFFFieldTag(fip), &ui, &array))
                       {
                           img.attribute<string>(aname) = "";
                       }
                   }
-                  else if (TIFFGetField(tif, fip->field_tag, &ui))
+                  else if (TIFFGetField(tif, TIFFFieldTag(fip), &ui))
                   {
                       img.attribute<int>(aname) = ui;
                   }
@@ -454,7 +457,7 @@ readAllTags(TIFF* tif, FrameBuffer& img)
               case TIFF_RATIONAL:
               case TIFF_SRATIONAL:
               case TIFF_FLOAT:
-                  if (TIFFGetField(tif, fip->field_tag, &f))
+                  if (TIFFGetField(tif, TIFFFieldTag(fip), &f))
                   {
                       img.attribute<float>(aname) = f;
                   }
@@ -466,7 +469,7 @@ readAllTags(TIFF* tif, FrameBuffer& img)
                   {
                       char* array = 0;
 
-                      if (TIFFGetField(tif, fip->field_tag, &ui, &array))
+                      if (TIFFGetField(tif, TIFFFieldTag(fip), &ui, &array))
                       {
                           img.attribute<string>(aname) = array;
                       }
@@ -479,12 +482,12 @@ readAllTags(TIFF* tif, FrameBuffer& img)
                   {
                       char* array = 0;
 
-                      if (TIFFGetField(tif, fip->field_tag, &ui, &array))
+                      if (TIFFGetField(tif, TIFFFieldTag(fip), &ui, &array))
                       {
                           img.attribute<string>(aname) = array;
                       }
                   }
-                  //if(TIFFGetField(tif, fip->field_tag, &ch))
+                  //if(TIFFGetField(tif, TIFFFieldTag(fip), &ch))
                   //{
                       //img.attribute<int>(aname) = ch;
                   //}
